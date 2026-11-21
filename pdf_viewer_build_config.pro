@@ -1,5 +1,5 @@
 TEMPLATE = app
-TARGET = sioyek
+TARGET = shioyek
 VERSION = 2.0.0
 
 INCLUDEPATH += ./pdf_viewer \
@@ -186,18 +186,18 @@ unix:!mac:!android {
         PREFIX = /usr
     }
     target.path = $$PREFIX/bin
-    shortcutfiles.files = resources/sioyek.desktop
+    shortcutfiles.files = resources/shioyek.desktop
     shortcutfiles.path = $$PREFIX/share/applications/
-    icon.files = resources/sioyek-icon-linux.png
+    icon.files = resources/shioyek-icon-linux.png
     icon.path = $$PREFIX/share/pixmaps/
     shaders.files = pdf_viewer/shaders/
-    shaders.path = $$PREFIX/share/sioyek/
+    shaders.path = $$PREFIX/share/shioyek/
     tutorial.files = tutorial.pdf
-    tutorial.path = $$PREFIX/share/sioyek/
+    tutorial.path = $$PREFIX/share/shioyek/
     keys.files = pdf_viewer/keys.config
-    keys.path = $$PREFIX/etc/sioyek
+    keys.path = $$PREFIX/etc/shioyek
     prefs.files = pdf_viewer/prefs.config
-    prefs.path = $$PREFIX/etc/sioyek
+    prefs.path = $$PREFIX/etc/shioyek
     INSTALLS += target
     INSTALLS += shortcutfiles
     INSTALLS += icon
@@ -205,15 +205,15 @@ unix:!mac:!android {
     INSTALLS += tutorial
     INSTALLS += keys
     INSTALLS += prefs	
-    DISTFILES += resources/sioyek.desktop\
-        resources/sioyek-icon-linux.png
+    DISTFILES += resources/shioyek.desktop\
+        resources/shioyek-icon-linux.png
 }
 
 mac {
     QMAKE_CXXFLAGS += -std=c++20
     LIBS += -ldl -L$$PWD/mupdf/build/release -lmupdf -lmupdf-third -lmupdf-threads -lz
     CONFIG+=sdk_no_version_check
-    QMAKE_MACOSX_DEPLOYMENT_TARGET = 15
+    QMAKE_MACOSX_DEPLOYMENT_TARGET = 12.0
     ICON = pdf_viewer\icon2.ico
     QMAKE_INFO_PLIST = resources/Info.plist
     LIBS += -framework AppKit

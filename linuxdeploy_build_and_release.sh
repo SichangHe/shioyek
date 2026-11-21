@@ -31,21 +31,15 @@ else
 	$QMAKE "CONFIG+=linux_app_image" pdf_viewer_build_config.pro
 fi
 
-rm -rf sioyek-release 2> /dev/null
-make install INSTALL_ROOT=sioyek-release -j$MAKE_PARALLEL
+rm -rf shioyek-release 2> /dev/null
+make install INSTALL_ROOT=shioyek-release -j$MAKE_PARALLEL
 
-cp pdf_viewer/prefs.config sioyek-release/usr/bin/prefs.config
-cp pdf_viewer/prefs_user.config sioyek-release/usr/share/prefs_user.config
-cp pdf_viewer/keys.config sioyek-release/usr/bin/keys.config
-cp pdf_viewer/keys_user.config sioyek-release/usr/share/keys_user.config
-cp -r pdf_viewer/shaders sioyek-release/usr/bin/shaders
-cp tutorial.pdf sioyek-release/usr/bin/tutorial.pdf
+cp pdf_viewer/prefs.config shioyek-release/usr/bin/prefs.config
+cp pdf_viewer/prefs_user.config shioyek-release/usr/share/prefs_user.config
+cp pdf_viewer/keys.config shioyek-release/usr/bin/keys.config
+cp pdf_viewer/keys_user.config shioyek-release/usr/share/keys_user.config
+cp -r pdf_viewer/shaders shioyek-release/usr/bin/shaders
+cp tutorial.pdf shioyek-release/usr/bin/tutorial.pdf
 
-QML_SOURCES_PATHS=./pdf_viewer/touchui ./linuxdeploy-x86_64.AppImage --appdir sioyek-release --plugin qt --output appimage
-
-# ./linuxdeployqt-continuous-x86_64.AppImage ./sioyek-release/usr/share/applications/sioyek.desktop -qmldir=./pdf_viewer/touchui -appimage
-# ./linuxdeployqt-continuous-x86_64.AppImage ./sioyek-release/usr/share/applications/sioyek.desktop -appimage
-
-
-# mv Sioyek-* Sioyek-x86_64.AppImage
-zip sioyek-release-linux.zip Sioyek-x86_64.AppImage
+QML_SOURCES_PATHS=./pdf_viewer/touchui ./linuxdeploy-x86_64.AppImage --appdir shioyek-release --plugin qt --output appimage
+mv Shioyek*.AppImage shioyek-linux-x86_64.AppImage

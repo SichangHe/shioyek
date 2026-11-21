@@ -15,7 +15,6 @@ cd mupdf
 make HAVE_GLUT=no -j$MAKE_PARALLEL
 cd ..
 
-sed -Ei '' "s/QMAKE_MACOSX_DEPLOYMENT_TARGET.=.[0-9]+/QMAKE_MACOSX_DEPLOYMENT_TARGET = $(sw_vers -productVersion | cut -d. -f1)/" pdf_viewer_build_config.pro
 
 if [[ $1 == portable ]]; then
 	qmake pdf_viewer_build_config.pro
@@ -27,24 +26,20 @@ make -j$MAKE_PARALLEL
 
 rm -rf build 2> /dev/null
 mkdir build
-mv sioyek.app build/
-cp -r pdf_viewer/shaders build/sioyek.app/Contents/Resources/shaders
+mv shioyek.app build/
+cp -r pdf_viewer/shaders build/shioyek.app/Contents/Resources/shaders
 
-cp pdf_viewer/prefs.config build/sioyek.app/Contents/Resources/prefs.config
-cp pdf_viewer/prefs_user.config build/sioyek.app/Contents/Resources/prefs_user.config
-cp pdf_viewer/keys.config build/sioyek.app/Contents/Resources/keys.config
-cp pdf_viewer/keys_user.config build/sioyek.app/Contents/Resources/keys_user.config
-cp tutorial.pdf build/sioyek.app/Contents/Resources/tutorial.pdf
+cp pdf_viewer/prefs.config build/shioyek.app/Contents/Resources/prefs.config
+cp pdf_viewer/prefs_user.config build/shioyek.app/Contents/Resources/prefs_user.config
+cp pdf_viewer/keys.config build/shioyek.app/Contents/Resources/keys.config
+cp pdf_viewer/keys_user.config build/shioyek.app/Contents/Resources/keys_user.config
+cp tutorial.pdf build/shioyek.app/Contents/Resources/tutorial.pdf
 
-# Capture the current PATH
-CURRENT_PATH=$(echo $PATH)
-
-# Define the path to the Info.plist file inside the app bundle
-INFO_PLIST="build/sioyek.app/Contents/Info.plist"
-
-# Add LSEnvironment key with PATH to Info.plist
+# Give Finder-launched app a PATH that finds TeX/editors for synctex inverse search
+INFO_PLIST="build/shioyek.app/Contents/Info.plist"
+APP_PATH="/opt/homebrew/bin:/usr/local/bin:/Library/TeX/texbin:/usr/bin:/bin:/usr/sbin:/sbin"
 /usr/libexec/PlistBuddy -c "Add :LSEnvironment dict" "$INFO_PLIST" || echo "LSEnvironment already exists"
-/usr/libexec/PlistBuddy -c "Add :LSEnvironment:PATH string $CURRENT_PATH" "$INFO_PLIST" || /usr/libexec/PlistBuddy -c "Set :LSEnvironment:PATH $CURRENT_PATH" "$INFO_PLIST"
+/usr/libexec/PlistBuddy -c "Add :LSEnvironment:PATH string $APP_PATH" "$INFO_PLIST" || /usr/libexec/PlistBuddy -c "Set :LSEnvironment:PATH $APP_PATH" "$INFO_PLIST"
 
 # Hack is required to avoid race condition in macos in CI
 # See https://github.com/actions/runner-images/issues/7522
@@ -56,9 +51,7 @@ fi
 sleep 5
 
 # mac deploys with qml currently don't work due to a qt bug
-# macdeployqt build/sioyek.app -qmldir=./pdf_viewer/touchui -dmg
-macdeployqt build/sioyek.app -dmg
-
-codesign --force --deep --sign - build/sioyek.app
-
-zip -r sioyek-release-mac.zip build/sioyek.dmg
+# macdeployqt build/shioyek.app -qmldir=./pdf_viewer/touchui -dmg
+macdeployqt build/shioyek.app
+codesign --force --deep --sign - build/shioyek.app
+hdiutil create -volname Shioyek -srcfolder build/shioyek.app -ov -format UDZO "build/shioyek-mac-${SHIOYEK_ARCH:-$(uname -m)}.dmg"

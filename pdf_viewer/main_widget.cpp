@@ -2150,6 +2150,12 @@ void MainWidget::open_document(const std::wstring& path, std::optional<float> of
         update_scrollbar();
     }
 
+    // shioyek: record the document in history as soon as it opens, so it
+    // survives a crash instead of only being saved on close/switch
+    if (main_document_view_has_document()) {
+        main_document_view->persist();
+    }
+
     // save current session
     if (FAIL_SAFE_AUTO_SAVE_SESSION) {
         persist(true);
@@ -4550,6 +4556,8 @@ void MainWidget::open_document(const std::wstring& doc_path,
     main_document_view->open_document(doc_path, invalid_flag, load_prev_state, prev_state, force_load_dimensions);
 
     if (doc()) {
+        // shioyek: record the document in history as soon as it opens
+        main_document_view->persist();
         document_manager->add_tab(doc()->get_path());
         //doc()->set_only_for_portal(false);
     }

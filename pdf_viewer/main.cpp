@@ -85,8 +85,8 @@
 
 std::string APPLICATION_VERSION = "2.0.0";
 int DATABASE_VERSION = 2;
-std::wstring APPLICATION_NAME = L"sioyek";
-std::string LOG_FILE_NAME = "sioyek_log.txt";
+std::wstring APPLICATION_NAME = L"shioyek";
+std::string LOG_FILE_NAME = "shioyek_log.txt";
 std::ofstream LOG_FILE;
 
 Path standard_data_path;
@@ -239,7 +239,7 @@ void configure_paths() {
     default_keys_path = mac_resources_path.slash(L"keys.config");
     tutorial_path = mac_resources_path.slash(L"tutorial.pdf");
     Path mac_home_path(QDir::homePath().toStdWString());
-    Path mac_standard_config_path = mac_home_path.slash(L".config").slash(L"sioyek");
+    Path mac_standard_config_path = mac_home_path.slash(L".config").slash(L"shioyek");
     user_keys_paths.push_back(mac_standard_config_path.slash(L"keys_user.config"));
     user_config_paths.push_back(mac_standard_config_path.slash(L"prefs_user.config"));
 #endif
@@ -253,9 +253,9 @@ void configure_paths() {
 
 #ifdef LINUX_STANDARD_PATHS
     Path home_path(QDir::homePath().toStdWString());
-    standard_data_path = home_path.slash(L".local").slash(L"share").slash(L"sioyek");
-    Path standard_config_path = Path(L"/etc/sioyek");
-    Path read_only_data_path = Path(L"/usr/share/sioyek");
+    standard_data_path = home_path.slash(L".local").slash(L"share").slash(L"shioyek");
+    Path standard_config_path = Path(L"/etc/shioyek");
+    Path read_only_data_path = Path(L"/usr/share/shioyek");
     standard_data_path.create_directories();
 
     default_config_path = read_only_data_path.slash(L"prefs.config");
@@ -279,7 +279,7 @@ void configure_paths() {
         standard_data_path = Path(utf8_decode(APPDIR));
     }
 
-    standard_data_path = standard_data_path.slash(L"sioyek");
+    standard_data_path = standard_data_path.slash(L"shioyek");
     standard_data_path.create_directories();
 
     default_config_path = parent_path.slash(L"prefs.config");
@@ -293,7 +293,7 @@ void configure_paths() {
     tutorial_path = standard_data_path.slash(L"tutorial.pdf");
     last_opened_file_address_path = standard_data_path.slash(L"last_document_path.txt");
 
-    Path linux_standard_config_path = linux_home_path.slash(L".config").slash(L"sioyek");
+    Path linux_standard_config_path = linux_home_path.slash(L".config").slash(L"shioyek");
     //user_keys_paths.push_back(mac_standard_config_path.slash(L"keys_user.config"));
     //user_config_paths.push_back(mac_standard_config_path.slash(L"prefs_user.config"));
     user_keys_paths.push_back(linux_standard_config_path.slash(L"keys_user.config"));
@@ -685,7 +685,7 @@ int main(int argc, char* args[]) {
 #endif
 
     if (has_arg(argc, args, "--version")) {
-        std::cout << "sioyek " << APPLICATION_VERSION << "\n";
+        std::cout << "shioyek " << APPLICATION_VERSION << "\n";
         return 0;
     }
     if (has_arg(argc, args, "--verbose")) {
@@ -782,7 +782,7 @@ int main(int argc, char* args[]) {
     }
 
 #ifndef SIOYEK_ANDROID
-    std::string instance_name_string = "sioyek";
+    std::string instance_name_string = "shioyek";
     char* instance_name = get_argv_value(argc, args, "--instance-name");
 
     if (instance_name) {
@@ -791,7 +791,7 @@ int main(int argc, char* args[]) {
 
     if (instance_name == nullptr && (!use_single_instance)) {
         std::wstring instance_uuid = new_uuid();
-        instance_name_string = "sioyek_" + utf8_encode(instance_uuid);
+        instance_name_string = "shioyek_" + utf8_encode(instance_uuid);
         std::wcout << L"instance name: " << utf8_decode(instance_name_string) << L"\n";
     }
 

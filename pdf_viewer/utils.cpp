@@ -95,7 +95,7 @@ std::wstring to_lower(const std::wstring& inp) {
 std::wstring get_path_extras_file_name(const std::wstring& path_) {
     Path path = Path(path_);
     QString filename = QString::fromStdWString(path.filename().value());
-    QString drawing_file_name = filename + ".sioyek.extras";
+    QString drawing_file_name = filename + ".shioyek.extras";
     std::wstring extras_file_path = path.file_parent().slash(drawing_file_name.toStdWString()).get_path();
     return extras_file_path;
 }
