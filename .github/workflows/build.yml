@@ -65,7 +65,7 @@ jobs:
           path: build/shioyek-mac-${{ matrix.arch }}.dmg
 
   release:
-    if: github.event_name == 'push'
+    if: github.event_name != 'pull_request'
     needs: [build-linux, build-mac]
     runs-on: ubuntu-latest
     steps:
