@@ -85,7 +85,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          gh release delete latest --yes --cleanup-tag || true
-          gh release create latest --prerelease --target "$GITHUB_SHA" \
-            --title "Latest build from main" --notes "Built from $GITHUB_SHA" \
-            *.AppImage *.dmg
+          # replace assets in place so the installer never sees an empty release
+          gh release view latest >/dev/null 2>&1 ||
+            gh release create latest --prerelease --target "$GITHUB_SHA" --title "Latest build from main" --notes ""
+          gh release upload latest --clobber *.AppImage *.dmg
+          gh release edit latest --notes "Built from $GITHUB_SHA"
