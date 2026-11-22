@@ -10,13 +10,19 @@ It installs as `shioyek` with its own config and data directories, so it can run
 - Only macOS and Linux are supported.
 - Config: `~/.config/shioyek/prefs_user.config` and `keys_user.config`. The documentation for Sioyek's config options still applies.
 
-## Download
+## Install or update
 
-Get the latest build from [Releases](../../releases). The `latest` prerelease is built from every push to `main`.
+macOS (Apple Silicon or Intel) and Linux (x86_64):
 
-- Linux: `chmod +x shioyek-linux-x86_64.AppImage`, then run it.
-- macOS: open the `.dmg` and drag `shioyek.app` to Applications. The app is not notarized, so before the first launch, run:
-  `xattr -dr com.apple.quarantine /Applications/shioyek.app`
+```sh
+curl -fsSL https://raw.githubusercontent.com/SichangHe/shioyek/main/install.sh | sh
+```
+
+What it does:
+- macOS: installs `shioyek.app` in `/Applications` and removes the download quarantine, so the unsigned app opens without a warning. It also links the `shioyek` command into `~/.local/bin`.
+- Linux: extracts the AppImage into `~/.local/share/shioyek-app`, which works without FUSE. It adds the `shioyek` command to `~/.local/bin` and a "Shioyek" entry to the app menu.
+
+To update, run the same command again. Manual downloads are on [Releases](../../releases). The `latest` prerelease is rebuilt on every push to `main`.
 
 ## License
 
