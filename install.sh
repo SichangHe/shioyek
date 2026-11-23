@@ -65,11 +65,8 @@ DESK
 }
 
 install_mac() {
-    case "$(uname -m)" in
-        arm64) ARCH=arm64 ;;
-        x86_64) ARCH=x86_64 ;;
-        *) die "unsupported Mac architecture $(uname -m)" ;;
-    esac
+    # ask the hardware: `uname -m` says x86_64 in a shell running under Rosetta
+    if [ "$(sysctl -n hw.optional.arm64 2>/dev/null)" = 1 ]; then ARCH=arm64; else ARCH=x86_64; fi
     fetch "$BASE/shioyek-mac-$ARCH.dmg" "$TMP/shioyek.dmg"
 
     MNT="$TMP/mnt"
