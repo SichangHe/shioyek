@@ -88,6 +88,8 @@ class PdfRenderer : public QObject {
 
     std::mutex searching_mutex;
     std::vector<std::mutex> thread_rendering_mutex;
+    // shioyek: set abort on a thread's cookie to cancel its in-flight render
+    std::vector<fz_cookie> thread_cookies;
 
     QTimer garbage_collect_timer;
 

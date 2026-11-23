@@ -17,10 +17,14 @@ extern float CUSTOM_COLOR_CONTRAST;
 extern int MAX_PENDING_REQUESTS;
 extern unsigned int CACHE_INVALID_MILIES;
 
+// shioyek: while painting continues, abort an in-flight render no paint wanted for this long
+const int STALE_RENDER_MS = 300;
+
 PdfRenderer::PdfRenderer(int num_threads, bool* should_quit_pointer, fz_context* context_to_clone) : context_to_clone(context_to_clone),
 pixmaps_to_drop(num_threads),
 pixmap_drop_mutex(num_threads),
 thread_rendering_mutex(num_threads),
+thread_cookies(num_threads),
 thread_contexts(num_threads),
 should_quit_pointer(should_quit_pointer),
 num_threads(num_threads)
@@ -151,8 +155,14 @@ GLuint PdfRenderer::find_rendered_page(std::wstring path, int page, bool should_
         req.should_render_annotations = should_render_annotations;
         cached_response_mutex.lock();
         GLuint result = 0;
+        unsigned int now_ms = QDateTime::currentMSecsSinceEpoch();
         for (auto& cached_resp : cached_responses) {
-            if (cached_resp.pending) continue;
+            if (cached_resp.pending) {
+                // shioyek: a paint still wants this render; abort in-flight renders no paint wanted lately
+                if (cached_resp.request == req) cached_resp.last_access_time = now_ms;
+                else if ((int)(now_ms - cached_resp.last_access_time) > STALE_RENDER_MS) thread_cookies[cached_resp.thread].abort = 1;
+                continue;
+            }
 
             if ((cached_resp.request == req) && (cached_resp.invalid == false)) {
                 cached_resp.last_access_time = QDateTime::currentMSecsSinceEpoch();
@@ -558,6 +568,7 @@ void PdfRenderer::run(int thread_index) {
             resp.invalid = false;
             resp.pending = true;
             cached_responses.push_back(resp);
+            thread_cookies[thread_index] = {};
         }
 
         cached_response_mutex.unlock();
@@ -579,38 +590,29 @@ void PdfRenderer::run(int thread_index) {
                 //	fz_drop_page(mupdf_context, page);
                 //}
                 //else {
-                if (req.slice_index == -1) {
-                    if (req.should_render_annotations) {
-                        rendered_pixmap = fz_new_pixmap_from_page_number(mupdf_context, doc, req.page, transform_matrix, fz_device_rgb(mupdf_context), 0);
-                    }
-                    else {
-                        fz_page* page = fz_load_page(mupdf_context, doc, req.page);
-                        rendered_pixmap = fz_new_pixmap_from_page_contents(mupdf_context, page, transform_matrix, fz_device_rgb(mupdf_context), 0);
-                        fz_drop_page(mupdf_context, page);
-                    }
+                fz_page* page = fz_load_page(mupdf_context, doc, req.page);
+                fz_rect rect = fz_bound_page(mupdf_context, page);
+                fz_irect bbox = req.slice_index == -1 ?
+                    fz_round_rect(fz_transform_rect(rect, transform_matrix)) :
+                    get_index_irect(rect, req.slice_index, transform_matrix, req.num_h_slices, req.num_v_slices);
+                rendered_pixmap = fz_new_pixmap_with_bbox(mupdf_context, fz_device_rgb(mupdf_context), bbox, nullptr, 0);
+                fz_clear_pixmap_with_value(mupdf_context, rendered_pixmap, 0xFF);
+                fz_device* draw_device = fz_new_draw_device(mupdf_context, transform_matrix, rendered_pixmap);
+                fz_cookie* cookie = &thread_cookies[thread_index];
+                if (req.should_render_annotations) {
+                    fz_run_page(mupdf_context, page, draw_device, fz_identity, cookie);
                 }
                 else {
-                    fz_page* page = fz_load_page(mupdf_context, doc, req.page);
-                    fz_rect rect = fz_bound_page(mupdf_context, page);
+                    fz_run_page_contents(mupdf_context, page, draw_device, fz_identity, cookie);
+                }
+                fz_close_device(mupdf_context, draw_device);
+                fz_drop_device(mupdf_context, draw_device);
+                fz_drop_page(mupdf_context, page);
 
-                    fz_irect bbox = get_index_irect(rect, req.slice_index, transform_matrix, req.num_h_slices, req.num_v_slices);
-
-                    rendered_pixmap = fz_new_pixmap_with_bbox(mupdf_context, fz_device_rgb(mupdf_context), bbox, nullptr, 0); // todo: use alpha
-
-                    fz_clear_pixmap_with_value(mupdf_context, rendered_pixmap, 0xFF);
-                    fz_device* draw_device = fz_new_draw_device(mupdf_context, transform_matrix, rendered_pixmap);
-
-                    if (req.should_render_annotations) {
-                        fz_run_page(mupdf_context, page, draw_device, fz_identity, nullptr); // todo: use cookie to report progress
-                    }
-                    else {
-                        fz_run_page_contents(mupdf_context, page, draw_device, fz_identity, nullptr); // todo: use cookie to report progress
-                    }
-
-                    fz_close_device(mupdf_context, draw_device);
-                    fz_drop_device(mupdf_context, draw_device);
-                    fz_drop_page(mupdf_context, page);
-
+                if (cookie->abort) {
+                    // shioyek: drop the partial render
+                    fz_drop_pixmap(mupdf_context, rendered_pixmap);
+                    fz_throw(mupdf_context, FZ_ERROR_ABORT, "render aborted");
                 }
 
                 if (GAMMA != 1.0f) {
@@ -639,7 +641,16 @@ void PdfRenderer::run(int thread_index) {
 
             }
             fz_catch(mupdf_context) {
-                std::cerr << "Error: could not render page" << std::endl;
+                if (thread_cookies[thread_index].abort) {
+                    // shioyek: forget the aborted render so a later paint can request it again
+                    cached_response_mutex.lock();
+                    int index = get_pending_response_index_with_thread_index(req, thread_index);
+                    if (index >= 0) cached_responses.erase(cached_responses.begin() + index);
+                    cached_response_mutex.unlock();
+                }
+                else {
+                    std::cerr << "Error: could not render page" << std::endl;
+                }
             }
         }
         thread_rendering_mutex[thread_index].unlock();
