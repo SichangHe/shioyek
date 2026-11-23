@@ -24,6 +24,12 @@ What it does:
 
 To update, run the same command again. Manual downloads are on [Releases](../../releases). The `latest` prerelease is rebuilt on every push to `main`.
 
+To copy your Sioyek config, history, and bookmarks into Shioyek (existing Shioyek data is kept as a `.bak-*` backup):
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/SichangHe/shioyek/main/migrate_from_sioyek.sh | sh
+```
+
 ## License
 
 GPL-3.0, same as upstream. See `LICENSE`.
