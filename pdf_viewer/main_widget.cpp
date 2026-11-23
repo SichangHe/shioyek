@@ -5265,6 +5265,27 @@ void MainWidget::reload(bool flush) {
 }
 
 
+// shioyek: synctex reports the line where TeX finished the paragraph, so look for the clicked word
+// in that paragraph's source, from the reported line upward; keep line/column if not found
+static void refine_synctex_pos(const char* file_name, QString word, int& line, int& column) {
+    word.remove(QRegularExpression("^\\W+|\\W+$"));
+    if (word.size() < 2) return;
+    QFile file(QString::fromUtf8(file_name));
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) return;
+    QStringList lines = QString::fromUtf8(file.readAll()).split('\n');
+    QRegularExpression word_regex("\\b" + QRegularExpression::escape(word) + "\\b");
+    int i = std::min(line, (int)lines.size()) - 1;
+    while (i >= 0 && lines[i].trimmed().isEmpty()) i--;
+    for (; i >= 0 && !lines[i].trimmed().isEmpty(); i--) {
+        int col = lines[i].lastIndexOf(word_regex);
+        if (col >= 0) {
+            line = i + 1;
+            column = col;
+            return;
+        }
+    }
+}
+
 std::wstring MainWidget::synctex_under_pos(WindowPos position) {
     std::wstring res = L"";
 #ifndef SIOYEK_ANDROID
@@ -5284,6 +5305,11 @@ std::wstring MainWidget::synctex_under_pos(WindowPos position) {
             if (column < 0) column = 0;
             int tag = synctex_node_tag(node);
             const char* file_name = synctex_scanner_get_name(scanner, tag);
+            AbsoluteDocumentPos click_abspos = main_document_view->window_to_absolute_document_pos(position);
+            std::deque<AbsoluteRect> word_rects;
+            std::wstring word;
+            main_document_view->get_text_selection(click_abspos, click_abspos, true, word_rects, word);
+            refine_synctex_pos(file_name, QString::fromStdWString(word), line, column);
             QString new_path;
 #ifdef Q_OS_WIN
             // the path returned by synctex is formatted in unix style, for example it is something like this
