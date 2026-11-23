@@ -5265,25 +5265,55 @@ void MainWidget::reload(bool flush) {
 }
 
 
-// shioyek: synctex reports the line where TeX finished the paragraph, so look for the clicked word
-// in that paragraph's source, from the reported line upward; keep line/column if not found
-static void refine_synctex_pos(const char* file_name, QString word, int& line, int& column) {
-    word.remove(QRegularExpression("^\\W+|\\W+$"));
-    if (word.size() < 2) return;
+// shioyek: synctex reports the line where TeX finished the paragraph, so find the clicked word in that
+// paragraph's source, picking the copy whose neighboring words best match the PDF text around the click;
+// left_text ends and right_text starts with the clicked word; keep line/column if nothing matches
+static void refine_synctex_pos(const char* file_name, const QString& left_text, const QString& right_text, int& line, int& column) {
+    const int n_context_words = 4;
+    QRegularExpression word_regex("\\w+", QRegularExpression::UseUnicodePropertiesOption);
+    auto words_in = [&](const QString& text) {
+        QStringList words;
+        for (auto it = word_regex.globalMatch(text); it.hasNext();) words.push_back(it.next().captured());
+        return words;
+    };
+    QStringList left = words_in(left_text);
+    QStringList right = words_in(right_text);
+    if (left.empty() || right.empty()) return;
     QFile file(QString::fromUtf8(file_name));
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) return;
     QStringList lines = QString::fromUtf8(file.readAll()).split('\n');
-    QRegularExpression word_regex("\\b" + QRegularExpression::escape(word) + "\\b");
-    int i = std::min(line, (int)lines.size()) - 1;
-    while (i >= 0 && lines[i].trimmed().isEmpty()) i--;
-    for (; i >= 0 && !lines[i].trimmed().isEmpty(); i--) {
-        int col = lines[i].lastIndexOf(word_regex);
-        if (col >= 0) {
-            line = i + 1;
-            column = col;
-            return;
+    int end = std::min(line, (int)lines.size()) - 1;
+    while (end >= 0 && lines[end].trimmed().isEmpty()) end--;
+    int begin = end;
+    while (begin > 0 && !lines[begin - 1].trimmed().isEmpty()) begin--;
+    struct SourceWord { QString text; int line; int column; };
+    std::vector<SourceWord> words;
+    for (int i = std::max(begin, 0); i <= end; i++) {
+        for (auto it = word_regex.globalMatch(lines[i]); it.hasNext();) {
+            auto match = it.next();
+            words.push_back({ match.captured(), i, (int)match.capturedStart() });
         }
     }
+    // score = neighbors found near each copy; source has extra words from macros, so look in a wider window
+    auto n_found = [&](const QStringList& pdf_words, int from, int to) {
+        int n = 0;
+        for (const QString& pdf_word : pdf_words) {
+            for (int k = std::max(from, 0); k < std::min(to, (int)words.size()); k++) {
+                if (words[k].text == pdf_word) { n++; break; }
+            }
+        }
+        return n;
+    };
+    int best = -1, best_score = -1;
+    for (int k = 0; k < (int)words.size(); k++) {
+        if (words[k].text != right.front()) continue;
+        int score = n_found(left.mid(std::max(0, (int)left.size() - 1 - n_context_words), std::min((int)left.size() - 1, n_context_words)), k - 2 * n_context_words, k)
+            + n_found(right.mid(1, n_context_words), k + 1, k + 1 + 2 * n_context_words);
+        if (score >= best_score) { best = k; best_score = score; }
+    }
+    if (best < 0) return;
+    line = words[best].line + 1;
+    column = words[best].column + 1;
 }
 
 std::wstring MainWidget::synctex_under_pos(WindowPos position) {
@@ -5306,10 +5336,16 @@ std::wstring MainWidget::synctex_under_pos(WindowPos position) {
             int tag = synctex_node_tag(node);
             const char* file_name = synctex_scanner_get_name(scanner, tag);
             AbsoluteDocumentPos click_abspos = main_document_view->window_to_absolute_document_pos(position);
+            // text on the clicked line, a little to each side of the click
+            const float context_width = 150;
+            AbsoluteDocumentPos left_abspos = click_abspos, right_abspos = click_abspos;
+            left_abspos.x -= context_width;
+            right_abspos.x += context_width;
             std::deque<AbsoluteRect> word_rects;
-            std::wstring word;
-            main_document_view->get_text_selection(click_abspos, click_abspos, true, word_rects, word);
-            refine_synctex_pos(file_name, QString::fromStdWString(word), line, column);
+            std::wstring left_text, right_text;
+            main_document_view->get_text_selection(left_abspos, click_abspos, true, word_rects, left_text);
+            main_document_view->get_text_selection(click_abspos, right_abspos, true, word_rects, right_text);
+            refine_synctex_pos(file_name, QString::fromStdWString(left_text), QString::fromStdWString(right_text), line, column);
             QString new_path;
 #ifdef Q_OS_WIN
             // the path returned by synctex is formatted in unix style, for example it is something like this
