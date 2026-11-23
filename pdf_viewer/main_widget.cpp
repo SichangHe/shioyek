@@ -5277,7 +5277,8 @@ std::wstring MainWidget::synctex_under_pos(WindowPos position) {
 
     if (stat > 0) {
         synctex_node_p node;
-        while ((node = synctex_scanner_next_result(scanner))) {
+        // shioyek: use only the best match; opening every match left the editor at the last, lower one
+        if ((node = synctex_scanner_next_result(scanner))) {
             int line = synctex_node_line(node);
             int column = synctex_node_column(node);
             if (column < 0) column = 0;
