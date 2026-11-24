@@ -5265,55 +5265,85 @@ void MainWidget::reload(bool flush) {
 }
 
 
-// shioyek: synctex reports the line where TeX finished the paragraph, so find the clicked word in that
-// paragraph's source, picking the copy whose neighboring words best match the PDF text around the click;
-// left_text ends and right_text starts with the clicked word; keep line/column if nothing matches
-static void refine_synctex_pos(const char* file_name, const QString& left_text, const QString& right_text, int& line, int& column) {
-    const int n_context_words = 4;
-    QRegularExpression word_regex("\\w+", QRegularExpression::UseUnicodePropertiesOption);
-    auto words_in = [&](const QString& text) {
-        QStringList words;
-        for (auto it = word_regex.globalMatch(text); it.hasNext();) words.push_back(it.next().captured());
-        return words;
-    };
-    QStringList left = words_in(left_text);
-    QStringList right = words_in(right_text);
-    if (left.empty() || right.empty()) return;
+// shioyek: synctex reports the line where TeX finished the paragraph, so locate the click inside that paragraph's
+// source by fuzzy-aligning the PDF text around the click to the source, comparing letters and digits only
+// (macro names, comments, punctuation, spaces dropped; accents folded); keep line/column if no good match.
+// click_index: position of the clicked character in pdf_text
+struct SynctexSourceChar { QChar c; int line; int column; };
+
+static void append_folded(const QString& text, std::vector<QChar>& out) {
+    for (QChar c : text.normalized(QString::NormalizationForm_KD)) {
+        if (c.isLetterOrNumber()) out.push_back(c.toLower());
+    }
+}
+
+static void refine_synctex_pos(const char* file_name, const QString& pdf_text, int click_index, int& line, int& column) {
+    std::vector<QChar> pdf;
+    append_folded(pdf_text.left(click_index), pdf);
+    int target = pdf.size(); // index of the clicked character among kept characters
+    append_folded(pdf_text.mid(click_index), pdf);
+    if (target >= (int)pdf.size() || pdf.size() < 4) return;
+
     QFile file(QString::fromUtf8(file_name));
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) return;
     QStringList lines = QString::fromUtf8(file.readAll()).split('\n');
-    int end = std::min(line, (int)lines.size()) - 1;
-    while (end >= 0 && lines[end].trimmed().isEmpty()) end--;
-    int begin = end;
+    int reported = std::min(line, (int)lines.size()) - 1;
+    while (reported >= 0 && lines[reported].trimmed().isEmpty()) reported--;
+    if (reported < 0) return;
+    int begin = reported, end = reported;
     while (begin > 0 && !lines[begin - 1].trimmed().isEmpty()) begin--;
-    struct SourceWord { QString text; int line; int column; };
-    std::vector<SourceWord> words;
-    for (int i = std::max(begin, 0); i <= end; i++) {
-        for (auto it = word_regex.globalMatch(lines[i]); it.hasNext();) {
-            auto match = it.next();
-            words.push_back({ match.captured(), i, (int)match.capturedStart() });
-        }
-    }
-    // score = neighbors found near each copy; source has extra words from macros, so look in a wider window
-    auto n_found = [&](const QStringList& pdf_words, int from, int to) {
-        int n = 0;
-        for (const QString& pdf_word : pdf_words) {
-            for (int k = std::max(from, 0); k < std::min(to, (int)words.size()); k++) {
-                if (words[k].text == pdf_word) { n++; break; }
+    while (end + 1 < (int)lines.size() && !lines[end + 1].trimmed().isEmpty()) end++;
+
+    std::vector<SynctexSourceChar> src;
+    for (int i = begin; i <= end; i++) {
+        const QString& l = lines[i];
+        for (int j = 0; j < l.size(); j++) {
+            if (l[j] == '%') break; // comment
+            if (l[j] == '\\') {
+                if (j + 1 < l.size() && l[j + 1].isLetter()) {
+                    while (j + 1 < l.size() && l[j + 1].isLetter()) j++; // macro name
+                }
+                else j++; // control symbol, e.g. \' or \%
+                continue;
             }
+            std::vector<QChar> folded;
+            append_folded(QString(l[j]), folded);
+            for (QChar c : folded) src.push_back({ c, i, j });
         }
-        return n;
-    };
-    int best = -1, best_score = -1;
-    for (int k = 0; k < (int)words.size(); k++) {
-        if (words[k].text != right.front()) continue;
-        int score = n_found(left.mid(std::max(0, (int)left.size() - 1 - n_context_words), std::min((int)left.size() - 1, n_context_words)), k - 2 * n_context_words, k)
-            + n_found(right.mid(1, n_context_words), k + 1, k + 1 + 2 * n_context_words);
-        if (score >= best_score) { best = k; best_score = score; }
     }
-    if (best < 0) return;
-    line = words[best].line + 1;
-    column = words[best].column + 1;
+    int m = pdf.size(), n = src.size();
+    if (n == 0) return;
+
+    // semi-global edit distance: all of pdf must align, any substring of src may be used
+    std::vector<std::vector<int>> cost(m + 1, std::vector<int>(n + 1, 0));
+    for (int i = 1; i <= m; i++) {
+        cost[i][0] = i;
+        for (int j = 1; j <= n; j++) {
+            int sub = cost[i - 1][j - 1] + (pdf[i - 1] == src[j - 1].c ? 0 : 1);
+            cost[i][j] = std::min({ sub, cost[i - 1][j] + 1, cost[i][j - 1] + 1 });
+        }
+    }
+    int best_j = 0;
+    for (int j = 1; j <= n; j++) if (cost[m][j] <= cost[m][best_j]) best_j = j;
+    if (cost[m][best_j] > m / 3) return;
+
+    // walk back to find the source character aligned with the clicked one
+    int i = m, j = best_j, found = -1;
+    while (i > 0 && j > 0) {
+        bool is_target = i - 1 == target;
+        if (cost[i][j] == cost[i - 1][j - 1] + (pdf[i - 1] == src[j - 1].c ? 0 : 1)) {
+            if (is_target) { found = j - 1; break; }
+            i--; j--;
+        }
+        else if (cost[i][j] == cost[i - 1][j] + 1) {
+            if (is_target) { found = std::min(j, n - 1); break; } // clicked char missing in source: take the next one
+            i--;
+        }
+        else j--;
+    }
+    if (found < 0) return;
+    line = src[found].line + 1;
+    column = src[found].column + 1;
 }
 
 std::wstring MainWidget::synctex_under_pos(WindowPos position) {
@@ -5341,11 +5371,14 @@ std::wstring MainWidget::synctex_under_pos(WindowPos position) {
             AbsoluteDocumentPos left_abspos = click_abspos, right_abspos = click_abspos;
             left_abspos.x -= context_width;
             right_abspos.x += context_width;
-            std::deque<AbsoluteRect> word_rects;
+            std::deque<AbsoluteRect> selected_rects;
             std::wstring left_text, right_text;
-            main_document_view->get_text_selection(left_abspos, click_abspos, true, word_rects, left_text);
-            main_document_view->get_text_selection(click_abspos, right_abspos, true, word_rects, right_text);
-            refine_synctex_pos(file_name, QString::fromStdWString(left_text), QString::fromStdWString(right_text), line, column);
+            main_document_view->get_text_selection(left_abspos, click_abspos, false, selected_rects, left_text);
+            main_document_view->get_text_selection(click_abspos, right_abspos, false, selected_rects, right_text);
+            QString pdf_text = QString::fromStdWString(left_text);
+            int click_index = pdf_text.size();
+            pdf_text += QString::fromStdWString(right_text);
+            refine_synctex_pos(file_name, pdf_text, click_index, line, column);
             QString new_path;
 #ifdef Q_OS_WIN
             // the path returned by synctex is formatted in unix style, for example it is something like this
