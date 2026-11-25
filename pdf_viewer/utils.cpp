@@ -1910,9 +1910,10 @@ QCommandLineParser* get_command_line_parser() {
     parser->setApplicationDescription("Sioyek is a PDF reader designed for reading research papers and technical books.");
     //parser->addVersionOption();
 
-    //QCommandLineOption reuse_instance_option("reuse-instance");
-    //reuse_instance_option.setDescription("When opening a new file, reuse the previous instance of sioyek instead of opening a new window.");
-    //parser->addOption(reuse_instance_option);
+    // shioyek: accept --reuse-instance (read from raw argv in main); upstream left it out of the parser, so it errored out
+    QCommandLineOption reuse_instance_option("reuse-instance");
+    reuse_instance_option.setDescription("When opening a new file, reuse the previous instance of shioyek even when should_launch_new_instance is set.");
+    parser->addOption(reuse_instance_option);
 
     QCommandLineOption new_instance_option("new-instance");
     new_instance_option.setDescription("When opening a new file, create a new instance of sioyek.");
