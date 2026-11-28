@@ -1,3 +1,5 @@
+#include <QTimer>
+#include <QPointer>
 #include <iostream>
 #include <vector>
 #include <string>
@@ -979,6 +981,41 @@ int main(int argc, char* args[]) {
     if (DISABLE_CURSOR_BLINKING){
         QApplication::setCursorFlashTime(0);
     }
+#ifdef Q_OS_MACOS
+    // when the app is switched to (e.g. cmd-tab), macOS may leave no window key;
+    // focus the most recently focused main window in that case
+    static QPointer<MainWidget> last_focused_main_window;
+    QObject::connect(&app, &QApplication::focusChanged, [&](QWidget*, QWidget* now) {
+        if (!now) return;
+        for (auto window : windows) {
+            if (window == now->window()) {
+                last_focused_main_window = window;
+                break;
+            }
+        }
+        });
+    QObject::connect(&app, &QGuiApplication::applicationStateChanged, [&](Qt::ApplicationState state) {
+        if (state != Qt::ApplicationActive) return;
+        QTimer::singleShot(0, [&]() {
+            if (QApplication::activeWindow() != nullptr) return;
+            MainWidget* target = last_focused_main_window;
+            if (target == nullptr || !target->isVisible()) {
+                target = nullptr;
+                for (auto window : windows) {
+                    if (window->isVisible() && !window->isMinimized()) {
+                        target = window;
+                        break;
+                    }
+                }
+            }
+            if (target) {
+                target->raise();
+                target->activateWindow();
+            }
+            });
+        });
+#endif
+
     app.exec();
 
     quit = true;
